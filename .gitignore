@@ -1,0 +1,9 @@
+# python
+.ipynb_checkpoints
+venv/
+
+# typescript
+node_modules
+
+# solidity
+.secret
