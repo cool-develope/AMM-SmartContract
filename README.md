@@ -1,4 +1,4 @@
-# AMM-SmartContract
+# Privi-Nested-AMM
 
 
 ## Introduction
