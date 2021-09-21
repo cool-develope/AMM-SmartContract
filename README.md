@@ -26,16 +26,25 @@ You need `.secret` file to deploy to testnet with your mnemonic.
 If you are the creater of AMM contract, firstly you should deposit initial tokens. 
 Before each deposit and swap, you need to call ERC20 `approve` mechanism. (*approve* button in UI).
 
+Before migrate, you need to modify the migration file `_amm_ropsten_migration.js` to `2_amm_ropsten_migration.js`
 
 ```bash
+cd SmartContracts
+
 # Deploy
-truffle deploy --network ropsten --reset
+truffle deploy --network ropsten --reset --f 2
 
 # Interact
 truffle console --network ropsten --verbose-rpc
+```
 
-# Frontend
-yarn && yarn start
+## Unit Test
+
+Before unit test, you need to modify the migration file `2_amm_ropsten_migration.js` to `_amm_ropsten_migration.js`
+
+```bash
+cd SmartContracts
+truffle test
 ```
 
 ## Reference 
