@@ -1,5 +1,5 @@
 const AMMmetadata: any = {
-  "address": "0xcd53DDd385556a1912ca9511d26217A2BA3D1833",
+  "address": "0x9B7209C17cB703f2d951A6e466e5a1000F5Ab2B1",
   "contractName": "AMM",
   "abi": [
 		{
