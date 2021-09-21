@@ -6,12 +6,9 @@ import {IERC20Metadata} from "@openzeppelin/contracts/token/ERC20/extensions/IER
 import "./ABDKMath64x64.sol";
 
 contract AMM {
-    address public constant aTokenAddress =
-        address(0x1f9840a85d5aF5bf1D1762F925BDADdC4201F984);
-    address public constant bTokenAddress =
-        address(0xf76D4a441E4ba86A923ce32B89AFF89dBccAA075);
-    address public constant yTokenAddress =
-        address(0xaD6D458402F60fD3Bd25163575031ACDce07538D);
+    address public aTokenAddress; // address(0x1f9840a85d5aF5bf1D1762F925BDADdC4201F984);
+    address public bTokenAddress; // address(0xf76D4a441E4ba86A923ce32B89AFF89dBccAA075);
+    address public yTokenAddress; // address(0xaD6D458402F60fD3Bd25163575031ACDce07538D);
 
     int256 public constant precision = 1000;
 
@@ -50,14 +47,25 @@ contract AMM {
         address indexed sender
     );
 
-    constructor(int256 sigma, int256 eta, int256 mme) {
-        aToken = IERC20(aTokenAddress);
-        bToken = IERC20(bTokenAddress);
-        yToken = IERC20(yTokenAddress);
+    constructor(
+        address _aToken,
+        address _bToken,
+        address _yToken,
+        int256 sigma,
+        int256 eta,
+        int256 mme
+    ) {
+        aTokenAddress = _aToken;
+        bTokenAddress = _bToken;
+        yTokenAddress = _yToken;
 
-        aDecimals = IERC20Metadata(aTokenAddress).decimals();
-        bDecimals = IERC20Metadata(bTokenAddress).decimals();
-        yDecimals = IERC20Metadata(yTokenAddress).decimals();
+        aToken = IERC20(_aToken);
+        bToken = IERC20(_bToken);
+        yToken = IERC20(_yToken);
+
+        aDecimals = IERC20Metadata(_aToken).decimals();
+        bDecimals = IERC20Metadata(_bToken).decimals();
+        yDecimals = IERC20Metadata(_yToken).decimals();
 
         _sigma = ABDKMath64x64.divi(sigma, precision);
         _eta = ABDKMath64x64.divi(eta, precision);
@@ -78,9 +86,9 @@ contract AMM {
         _eta_to_sigma = ABDKMath64x64.div(_one_minus_eta, _one_minus_sigma);
         _sigma_to_eta = ABDKMath64x64.div(_one_minus_sigma, _one_minus_eta);
 
-        amounts[aTokenAddress] = 0;
-        amounts[bTokenAddress] = 0;
-        amounts[yTokenAddress] = 0;
+        amounts[_aToken] = 0;
+        amounts[_bToken] = 0;
+        amounts[_yToken] = 0;
         owner = msg.sender;
     }
 
@@ -97,9 +105,18 @@ contract AMM {
     }
 
     function muFunction() internal view returns (int128) {
-        int128 a = ABDKMath64x64.divi(amounts[aTokenAddress], int256(10**aDecimals));
-        int128 b = ABDKMath64x64.divi(amounts[bTokenAddress], int256(10**bDecimals));
-        int128 y = ABDKMath64x64.divi(amounts[yTokenAddress], int256(10**yDecimals));
+        int128 a = ABDKMath64x64.divi(
+            amounts[aTokenAddress],
+            int256(10**aDecimals)
+        );
+        int128 b = ABDKMath64x64.divi(
+            amounts[bTokenAddress],
+            int256(10**bDecimals)
+        );
+        int128 y = ABDKMath64x64.divi(
+            amounts[yTokenAddress],
+            int256(10**yDecimals)
+        );
 
         return ABDKMath64x64.add(getAplusB(a, b), getPow(y, _one_minus_eta));
     }
@@ -170,11 +187,51 @@ contract AMM {
             );
     }
 
+    function checkLimit(int256 baseAmount, int256 realAmount)
+        private
+        view
+        returns (bool)
+    {
+        int256 lowerLimit = ABDKMath64x64.muli(
+            ABDKMath64x64.sub(ABDKMath64x64.fromInt(1), _mme),
+            baseAmount
+        );
+        int256 upperLimit = ABDKMath64x64.muli(
+            ABDKMath64x64.add(ABDKMath64x64.fromInt(1), _mme),
+            baseAmount
+        );
+
+        return (lowerLimit < realAmount) && (realAmount < upperLimit);
+    }
+
+    function getAmountsAddToken(address token, uint256 amount)
+        public
+        view
+        returns (
+            int256 addAmountA,
+            int256 addAmountB,
+            int256 addAmountY
+        )
+    {
+        addAmountA = ABDKMath64x64.muli(
+            ABDKMath64x64.divi(amounts[aTokenAddress], amounts[token]),
+            int256(amount)
+        );
+        addAmountB = ABDKMath64x64.muli(
+            ABDKMath64x64.divi(amounts[bTokenAddress], amounts[token]),
+            int256(amount)
+        );
+        addAmountY = ABDKMath64x64.muli(
+            ABDKMath64x64.divi(amounts[yTokenAddress], amounts[token]),
+            int256(amount)
+        );
+    }
+
     function getAmountOut(
         int256 amountIn,
         address tokenIn,
         address tokenOut
-    ) internal view returns (uint256 amountOut) {
+    ) public view returns (uint256 amountOut) {
         int128 res = 0;
         uint8 decimal = 18;
 
@@ -234,15 +291,11 @@ contract AMM {
         return amounts[token];
     }
 
-
-    function checkLimit(int baseAmount, int realAmount) private view returns (bool) {
-      int lowerLimit = ABDKMath64x64.muli(ABDKMath64x64.sub(ABDKMath64x64.fromInt(1), _mme), baseAmount);
-      int upperLimit = ABDKMath64x64.muli(ABDKMath64x64.add(ABDKMath64x64.fromInt(1), _mme), baseAmount);
-
-      return (lowerLimit < realAmount) && (realAmount < upperLimit);
-    }
-
-    function addLiquidity(uint256 aAmount, uint256 bAmount, uint256 yAmount) public returns (bool) {
+    function addLiquidity(
+        uint256 aAmount,
+        uint256 bAmount,
+        uint256 yAmount
+    ) public returns (bool) {
         require(aAmount > 0, "INSUFFICIENT_INPUT_AMOUNT_TOKEN_A");
         require(bAmount > 0, "INSUFFICIENT_INPUT_AMOUNT_TOKEN_B");
         require(yAmount > 0, "INSUFFICIENT_INPUT_AMOUNT_TOKEN_Y");
@@ -263,21 +316,30 @@ contract AMM {
         );
 
         if (msg.sender != owner) {
-          require(
-            amounts[aTokenAddress] > 0 && amounts[bTokenAddress] > 0 && amounts[yTokenAddress] > 0,
-            "INSUFFICIENT_LIQUIDITY_AMOUNT"
-          );
+            require(
+                amounts[aTokenAddress] > 0 &&
+                    amounts[bTokenAddress] > 0 &&
+                    amounts[yTokenAddress] > 0,
+                "INSUFFICIENT_LIQUIDITY_AMOUNT"
+            );
 
-          int128 b_to_a = ABDKMath64x64.divi(amounts[bTokenAddress], amounts[aTokenAddress]);
-          int128 y_to_a = ABDKMath64x64.divi(amounts[yTokenAddress], amounts[aTokenAddress]);
+            int128 b_to_a = ABDKMath64x64.divi(
+                amounts[bTokenAddress],
+                amounts[aTokenAddress]
+            );
+            int128 y_to_a = ABDKMath64x64.divi(
+                amounts[yTokenAddress],
+                amounts[aTokenAddress]
+            );
 
-          int delta_b = ABDKMath64x64.muli(b_to_a, int(aAmount));
-          int delta_y = ABDKMath64x64.muli(y_to_a, int(aAmount));
+            int256 delta_b = ABDKMath64x64.muli(b_to_a, int256(aAmount));
+            int256 delta_y = ABDKMath64x64.muli(y_to_a, int256(aAmount));
 
-          require(
-            checkLimit(delta_b, int(bAmount)) && checkLimit(delta_y, int(yAmount)),
-            "MISMATCH_RATIO"
-          );
+            require(
+                checkLimit(delta_b, int256(bAmount)) &&
+                    checkLimit(delta_y, int256(yAmount)),
+                "MISMATCH_RATIO"
+            );
         }
 
         aToken.transferFrom(msg.sender, address(this), aAmount);
@@ -290,11 +352,11 @@ contract AMM {
 
         _mu = muFunction();
         emit Deposit(aAmount, bAmount, yAmount, ABDKMath64x64.muli(_mu, 1000));
-        
+
         return true;
     }
 
-    function swap(
+    function swapToken(
         uint256 amountIn,
         address tokenIn,
         address tokenOut
