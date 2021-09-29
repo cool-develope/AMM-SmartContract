@@ -151,6 +151,8 @@ contract('AMM test', async (accounts) => {
             bSwapAmount,
             bToken.address,
             aToken.address,
+            "0x0000000000000000000000000000000000000000",
+            50,
             { from: accounts[1] },
         )
         const afterBalance = await aToken.balanceOf.call(accounts[1])

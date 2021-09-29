@@ -3,14 +3,18 @@ pragma solidity >=0.4.22 <0.9.0;
 
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {IERC20Metadata} from "@openzeppelin/contracts/token/ERC20/extensions/IERC20Metadata.sol";
+import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import "./ABDKMath64x64.sol";
 
-contract AMM {
+
+contract AMM is IERC20, ERC20 {
     address public aTokenAddress; // address(0x1f9840a85d5aF5bf1D1762F925BDADdC4201F984);
     address public bTokenAddress; // address(0xf76D4a441E4ba86A923ce32B89AFF89dBccAA075);
     address public yTokenAddress; // address(0xaD6D458402F60fD3Bd25163575031ACDce07538D);
 
     int256 public constant precision = 1000;
+    bytes4 private constant SELECTOR =
+        bytes4(keccak256(bytes("transfer(address,uint256)")));
 
     int128 _sigma;
     int128 _eta;
@@ -21,6 +25,7 @@ contract AMM {
     int128 _reverse_eta;
     int128 _eta_to_sigma;
     int128 _sigma_to_eta;
+    int128 _eta_minus_sigma;
 
     int128 _mu; // constant curve
     int128 _mme; // maximum margin of error
@@ -39,6 +44,13 @@ contract AMM {
 
     event Deposit(uint256 aAmount, uint256 bAmount, uint256 yAmount, int256 mu);
 
+    event Withdraw(
+        uint256 aAmount,
+        uint256 bAmount,
+        uint256 yAmount,
+        int256 mu
+    );
+
     event Swap(
         uint256 amountIn,
         uint256 amountOut,
@@ -54,7 +66,7 @@ contract AMM {
         int256 sigma,
         int256 eta,
         int256 mme
-    ) {
+    ) ERC20("LP Token", "LPC") {
         aTokenAddress = _aToken;
         bTokenAddress = _bToken;
         yTokenAddress = _yToken;
@@ -86,25 +98,44 @@ contract AMM {
         _eta_to_sigma = ABDKMath64x64.div(_one_minus_eta, _one_minus_sigma);
         _sigma_to_eta = ABDKMath64x64.div(_one_minus_sigma, _one_minus_eta);
 
+        _eta_minus_sigma = ABDKMath64x64.div(
+            ABDKMath64x64.sub(_eta, _sigma),
+            _one_minus_sigma
+        );
+
         amounts[_aToken] = 0;
         amounts[_bToken] = 0;
         amounts[_yToken] = 0;
         owner = msg.sender;
     }
 
-    function getPow(int128 x, int128 p) internal pure returns (int128) {
+    function _safeTransfer(
+        address token,
+        address to,
+        uint256 value
+    ) private {
+        (bool success, bytes memory data) = token.call(
+            abi.encodeWithSelector(SELECTOR, to, value)
+        );
+        require(
+            success && (data.length == 0 || abi.decode(data, (bool))),
+            "AMM: TRANSFER_FAILED"
+        );
+    }
+
+    function getPow(int128 x, int128 p) private pure returns (int128) {
         return
             ABDKMath64x64.exp_2(ABDKMath64x64.mul(ABDKMath64x64.log_2(x), p));
     }
 
-    function getAplusB(int128 a, int128 b) internal view returns (int128) {
+    function getAplusB(int128 a, int128 b) private view returns (int128) {
         int128 aexp = getPow(a, _one_minus_sigma);
         int128 bexp = getPow(b, _one_minus_sigma);
 
         return getPow(ABDKMath64x64.add(aexp, bexp), _eta_to_sigma);
     }
 
-    function muFunction() internal view returns (int128) {
+    function muFunction() private view returns (int128) {
         int128 a = ABDKMath64x64.divi(
             amounts[aTokenAddress],
             int256(10**aDecimals)
@@ -121,8 +152,8 @@ contract AMM {
         return ABDKMath64x64.add(getAplusB(a, b), getPow(y, _one_minus_eta));
     }
 
-    function getAtoY(int256 _a, int256 _b)
-        internal
+    function getAtoYAmount(int256 _a, int256 _b)
+        private
         view
         returns (int128 amountOut)
     {
@@ -140,11 +171,11 @@ contract AMM {
             );
     }
 
-    function getYtoA(
+    function getYtoAAmount(
         int256 _y,
         int256 _a,
         int256 _b
-    ) internal view returns (int128 amountOut) {
+    ) private view returns (int128 amountOut) {
         int128 a = ABDKMath64x64.divi(_a, int256(10**aDecimals));
         int128 b = ABDKMath64x64.divi(_b, int256(10**bDecimals));
         int128 y = ABDKMath64x64.divi(_y, int256(10**yDecimals));
@@ -162,8 +193,8 @@ contract AMM {
             );
     }
 
-    function getAtoB(int256 _a, int256 _b)
-        internal
+    function getAtoBAmount(int256 _a, int256 _b)
+        private
         view
         returns (int128 amountOut)
     {
@@ -187,17 +218,56 @@ contract AMM {
             );
     }
 
-    function checkLimit(int256 baseAmount, int256 realAmount)
-        private
-        view
-        returns (bool)
-    {
+    function getAtoBPrice() private view returns (int128 price) {
+        int128 a = ABDKMath64x64.divi(
+            amounts[aTokenAddress],
+            int256(10**aDecimals)
+        );
+        int128 b = ABDKMath64x64.divi(
+            amounts[bTokenAddress],
+            int256(10**bDecimals)
+        );
+
+        price = getPow(ABDKMath64x64.div(a, b), _sigma);
+    }
+
+    function getAtoYPrice() private view returns (int128 price) {
+        int128 a = ABDKMath64x64.divi(
+            amounts[aTokenAddress],
+            int256(10**aDecimals)
+        );
+        int128 b = ABDKMath64x64.divi(
+            amounts[bTokenAddress],
+            int256(10**bDecimals)
+        );
+        int128 y = ABDKMath64x64.divi(
+            amounts[yTokenAddress],
+            int256(10**yDecimals)
+        );
+
+        int128 r = ABDKMath64x64.div(b, a);
+        int128 k = getPow(
+            ABDKMath64x64.add(
+                ABDKMath64x64.fromInt(1),
+                getPow(r, _one_minus_sigma)
+            ),
+            _eta_minus_sigma
+        );
+
+        price = ABDKMath64x64.mul(getPow(ABDKMath64x64.sub(a, y), _eta), k);
+    }
+
+    function checkLimit(
+        int256 baseAmount,
+        int256 realAmount,
+        int128 limit
+    ) private pure returns (bool) {
         int256 lowerLimit = ABDKMath64x64.muli(
-            ABDKMath64x64.sub(ABDKMath64x64.fromInt(1), _mme),
+            ABDKMath64x64.sub(ABDKMath64x64.fromInt(1), limit),
             baseAmount
         );
         int256 upperLimit = ABDKMath64x64.muli(
-            ABDKMath64x64.add(ABDKMath64x64.fromInt(1), _mme),
+            ABDKMath64x64.add(ABDKMath64x64.fromInt(1), limit),
             baseAmount
         );
 
@@ -227,6 +297,41 @@ contract AMM {
         );
     }
 
+    function getPrice(address tokenIn, address tokenOut)
+        public
+        view
+        returns (uint256 price)
+    {
+        int128 _price;
+        if (tokenOut == aTokenAddress) {
+            if (tokenIn == bTokenAddress) {
+                _price = getAtoBPrice();
+            } else if (tokenIn == yTokenAddress) {
+                _price = getAtoYPrice();
+            }
+        } else if (tokenOut == bTokenAddress) {
+            if (tokenIn == aTokenAddress) {
+                _price = ABDKMath64x64.div(
+                    ABDKMath64x64.fromInt(1),
+                    getAtoBPrice()
+                );
+            } else if (tokenIn == yTokenAddress) {
+                _price = ABDKMath64x64.div(getAtoYPrice(), getAtoBPrice());
+            }
+        } else if (tokenOut == yTokenAddress) {
+            if (tokenIn == aTokenAddress) {
+                _price = ABDKMath64x64.div(
+                    ABDKMath64x64.fromInt(1),
+                    getAtoYPrice()
+                );
+            } else if (tokenIn == bTokenAddress) {
+                _price = ABDKMath64x64.div(getAtoBPrice(), getAtoYPrice());
+            }
+        }
+
+        price = ABDKMath64x64.mulu(_price, 10**18);
+    }
+
     function getAmountOut(
         int256 amountIn,
         address tokenIn,
@@ -237,13 +342,13 @@ contract AMM {
 
         if (tokenIn == aTokenAddress) {
             if (tokenOut == bTokenAddress) {
-                res = getAtoB(
+                res = getAtoBAmount(
                     amounts[aTokenAddress] + amountIn,
                     amounts[bTokenAddress]
                 );
                 decimal = bDecimals;
             } else if (tokenOut == yTokenAddress) {
-                res = getAtoY(
+                res = getAtoYAmount(
                     amounts[aTokenAddress] + amountIn,
                     amounts[bTokenAddress]
                 );
@@ -251,13 +356,13 @@ contract AMM {
             }
         } else if (tokenIn == bTokenAddress) {
             if (tokenOut == aTokenAddress) {
-                res = getAtoB(
+                res = getAtoBAmount(
                     amounts[bTokenAddress] + amountIn,
                     amounts[aTokenAddress]
                 );
                 decimal = aDecimals;
             } else if (tokenOut == yTokenAddress) {
-                res = getAtoY(
+                res = getAtoYAmount(
                     amounts[bTokenAddress] + amountIn,
                     amounts[aTokenAddress]
                 );
@@ -265,14 +370,14 @@ contract AMM {
             }
         } else if (tokenIn == yTokenAddress) {
             if (tokenOut == aTokenAddress) {
-                res = getYtoA(
+                res = getYtoAAmount(
                     amounts[yTokenAddress] + amountIn,
                     amounts[aTokenAddress],
                     amounts[bTokenAddress]
                 );
                 decimal = aDecimals;
             } else if (tokenOut == bTokenAddress) {
-                res = getYtoA(
+                res = getYtoAAmount(
                     amounts[yTokenAddress] + amountIn,
                     amounts[bTokenAddress],
                     amounts[aTokenAddress]
@@ -281,7 +386,23 @@ contract AMM {
             }
         }
 
-        amountOut = uint256(ABDKMath64x64.muli(res, int256(10**decimal)));
+        // Swap fee: 0.3%
+        if (decimal >= 3) {
+            amountOut = uint256(
+                ABDKMath64x64.muli(res, 997 * int256(10**(decimal - 3)))
+            );
+        } else {
+            amountOut = uint256(
+                ABDKMath64x64.muli(
+                    ABDKMath64x64.div(
+                        res,
+                        ABDKMath64x64.fromUInt(10**(3 - decimal))
+                    ),
+                    997
+                )
+            );
+        }
+
         require(amountOut > 0, "INSUFFICIENT_OUT_AMOUNT");
 
         return amountOut;
@@ -295,7 +416,7 @@ contract AMM {
         uint256 aAmount,
         uint256 bAmount,
         uint256 yAmount
-    ) public returns (bool) {
+    ) external {
         require(aAmount > 0, "INSUFFICIENT_INPUT_AMOUNT_TOKEN_A");
         require(bAmount > 0, "INSUFFICIENT_INPUT_AMOUNT_TOKEN_B");
         require(yAmount > 0, "INSUFFICIENT_INPUT_AMOUNT_TOKEN_Y");
@@ -323,21 +444,14 @@ contract AMM {
                 "INSUFFICIENT_LIQUIDITY_AMOUNT"
             );
 
-            int128 b_to_a = ABDKMath64x64.divi(
-                amounts[bTokenAddress],
-                amounts[aTokenAddress]
+            (int256 delta_a, int256 delta_b, ) = getAmountsAddToken(
+                yTokenAddress,
+                yAmount
             );
-            int128 y_to_a = ABDKMath64x64.divi(
-                amounts[yTokenAddress],
-                amounts[aTokenAddress]
-            );
-
-            int256 delta_b = ABDKMath64x64.muli(b_to_a, int256(aAmount));
-            int256 delta_y = ABDKMath64x64.muli(y_to_a, int256(aAmount));
 
             require(
-                checkLimit(delta_b, int256(bAmount)) &&
-                    checkLimit(delta_y, int256(yAmount)),
+                checkLimit(delta_a, int256(aAmount), _mme) &&
+                    checkLimit(delta_b, int256(bAmount), _mme),
                 "MISMATCH_RATIO"
             );
         }
@@ -350,17 +464,51 @@ contract AMM {
         amounts[bTokenAddress] = amounts[bTokenAddress] + int256(bAmount);
         amounts[yTokenAddress] = amounts[yTokenAddress] + int256(yAmount);
 
-        _mu = muFunction();
-        emit Deposit(aAmount, bAmount, yAmount, ABDKMath64x64.muli(_mu, 1000));
+        _mint(msg.sender, yAmount);
 
-        return true;
+        _mu = muFunction();
+
+        emit Deposit(aAmount, bAmount, yAmount, ABDKMath64x64.muli(_mu, 1000));
+    }
+
+    function removeLiquidity(uint256 amount) external {
+        require(amount > 0, "INSUFFICIENT_WITHDRAW_AMOUNT");
+
+        transferFrom(msg.sender, address(this), amount);
+        _burn(address(this), amount);
+
+        (int256 delta_a, int256 delta_b, ) = getAmountsAddToken(
+            yTokenAddress,
+            amount
+        );
+
+        _safeTransfer(aTokenAddress, msg.sender, uint256(delta_a));
+        _safeTransfer(bTokenAddress, msg.sender, uint256(delta_b));
+        _safeTransfer(yTokenAddress, msg.sender, uint256(amount));
+
+        amounts[aTokenAddress] = amounts[aTokenAddress] - delta_a;
+        amounts[bTokenAddress] = amounts[bTokenAddress] - delta_b;
+        amounts[yTokenAddress] = amounts[yTokenAddress] - int256(amount);
+
+        _mu = muFunction();
+
+        emit Withdraw(
+            uint256(delta_a),
+            uint256(delta_b),
+            amount,
+            ABDKMath64x64.muli(_mu, 1000)
+        );
     }
 
     function swapToken(
         uint256 amountIn,
         address tokenIn,
-        address tokenOut
-    ) public returns (uint256) {
+        address tokenOut,
+        address recipient,
+        uint256 slippage // define enum in the production
+    ) external returns (uint256) {
+        uint256 price = getPrice(tokenIn, tokenOut);
+
         require(amountIn > 0, "INSUFFICIENT_INPUT_AMOUNT");
         IERC20 _tokenIn = IERC20(tokenIn);
         require(
@@ -369,6 +517,17 @@ contract AMM {
         );
 
         uint256 amountOut = getAmountOut(int256(amountIn), tokenIn, tokenOut);
+
+        uint256 realPrice = (amountOut * (10**18)) / amountIn;
+
+        require(
+            checkLimit(
+                int256(price),
+                int256(realPrice),
+                ABDKMath64x64.divu(slippage, uint256(precision))
+            ),
+            "NOT_ENOUGH_SLIPPAGE_LEVEL"
+        );
 
         require(
             amounts[tokenOut] > int256(amountOut),
@@ -379,7 +538,9 @@ contract AMM {
 
         amounts[tokenIn] += int256(amountIn);
 
-        IERC20(tokenOut).transfer(msg.sender, amountOut);
+        if (recipient == address(0))
+            IERC20(tokenOut).transfer(msg.sender, amountOut);
+        else IERC20(tokenOut).transfer(recipient, amountOut);
 
         amounts[tokenOut] -= int256(amountOut);
 
