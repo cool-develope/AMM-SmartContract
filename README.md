@@ -38,6 +38,18 @@ truffle deploy --network ropsten --reset --f 2
 truffle console --network ropsten --verbose-rpc
 ```
 
+## Deploy to Mumbai testnet
+
+You need to find 3 ERC20 token addresses in mumbai testnet, and then update the migration file in the init params.
+Before migrate, you need to modify the migration file `_amm_matic_migration.js` to `2_amm_matic_migration.js`
+
+```bash
+
+cd SmartContracts
+
+# Deploy to matic
+truffle migrate --network matic --f 2
+```
 ## Unit Test
 
 Before unit test, you need to modify the migration file `2_amm_ropsten_migration.js` to `_amm_ropsten_migration.js`

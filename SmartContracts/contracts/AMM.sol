@@ -8,9 +8,9 @@ import "./ABDKMath64x64.sol";
 
 
 contract AMM is IERC20, ERC20 {
-    address public aTokenAddress; // address(0x1f9840a85d5aF5bf1D1762F925BDADdC4201F984);
-    address public bTokenAddress; // address(0xf76D4a441E4ba86A923ce32B89AFF89dBccAA075);
-    address public yTokenAddress; // address(0xaD6D458402F60fD3Bd25163575031ACDce07538D);
+    address public aTokenAddress; 
+    address public bTokenAddress; 
+    address public yTokenAddress; 
 
     int256 public constant precision = 1000;
     bytes4 private constant SELECTOR =
@@ -254,7 +254,7 @@ contract AMM is IERC20, ERC20 {
             _eta_minus_sigma
         );
 
-        price = ABDKMath64x64.mul(getPow(ABDKMath64x64.sub(a, y), _eta), k);
+        price = ABDKMath64x64.mul(getPow(ABDKMath64x64.div(a, y), _eta), k);
     }
 
     function checkLimit(
@@ -468,27 +468,32 @@ contract AMM is IERC20, ERC20 {
 
         _mu = muFunction();
 
-        emit Deposit(aAmount, bAmount, yAmount, ABDKMath64x64.muli(_mu, 1000));
+        emit Deposit(aAmount, bAmount, yAmount, ABDKMath64x64.muli(_mu, 10**8));
     }
 
     function removeLiquidity(uint256 amount) external {
         require(amount > 0, "INSUFFICIENT_WITHDRAW_AMOUNT");
 
-        transferFrom(msg.sender, address(this), amount);
-        _burn(address(this), amount);
+        int delta_y = ABDKMath64x64.muli(
+            ABDKMath64x64.divu(amount, totalSupply()),
+            amounts[yTokenAddress]
+        );
 
         (int256 delta_a, int256 delta_b, ) = getAmountsAddToken(
             yTokenAddress,
-            amount
+            uint(delta_y)
         );
+
+        transferFrom(msg.sender, address(this), amount);
+        _burn(address(this), amount);        
 
         _safeTransfer(aTokenAddress, msg.sender, uint256(delta_a));
         _safeTransfer(bTokenAddress, msg.sender, uint256(delta_b));
-        _safeTransfer(yTokenAddress, msg.sender, uint256(amount));
+        _safeTransfer(yTokenAddress, msg.sender, uint256(delta_y));
 
         amounts[aTokenAddress] = amounts[aTokenAddress] - delta_a;
         amounts[bTokenAddress] = amounts[bTokenAddress] - delta_b;
-        amounts[yTokenAddress] = amounts[yTokenAddress] - int256(amount);
+        amounts[yTokenAddress] = amounts[yTokenAddress] - delta_y;
 
         _mu = muFunction();
 
