@@ -1,9 +1,9 @@
-import { ReactNode } from "react";
-import { Flex } from "@chakra-ui/react";
+import { ReactNode } from 'react'
+import { Flex } from '@chakra-ui/react'
 
 type Props = {
-  children?: ReactNode;
-};
+  children?: ReactNode
+}
 
 export default function Layout({ children }: Props) {
   return (
@@ -16,5 +16,5 @@ export default function Layout({ children }: Props) {
     >
       {children}
     </Flex>
-  );
+  )
 }

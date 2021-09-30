@@ -1,11 +1,11 @@
-import { Button, Box, Text } from "@chakra-ui/react";
-import { formatEther } from "@ethersproject/units";
-import { useWeb3React } from "@web3-react/core"
-import Identicon from "./Identicon";
-import { useEffect, useState } from "react";
+import { Button, Box, Text } from '@chakra-ui/react'
+import { formatEther } from '@ethersproject/units'
+import { useWeb3React } from '@web3-react/core'
+import Identicon from './Identicon'
+import { useEffect, useState } from 'react'
 
 import { InjectedConnector } from '@web3-react/injected-connector'
-import Web3 from "web3";
+import Web3 from 'web3'
 
 import { getEtherBalance } from '../connectors/connector'
 
@@ -14,19 +14,28 @@ export const injected = new InjectedConnector({
 })
 
 type Props = {
-  handleOpenModal: any;
-  setAccount: any;
-};
+  handleOpenModal: any
+  setAccount: any
+}
 
 export default function ConnectButton({ handleOpenModal, setAccount }: Props) {
-  const { active, account, library, connector, activate, deactivate } = useWeb3React()
-  const web3 = new Web3(library?.provider);
-  const [etherBalance, setEtherBalance] = useState("");
-
-  useEffect(() => { setAccount(account); }, [account]);
+  const {
+    active,
+    account,
+    library,
+    connector,
+    activate,
+    deactivate,
+  } = useWeb3React()
+  const web3 = new Web3(library?.provider)
+  const [etherBalance, setEtherBalance] = useState('')
 
   useEffect(() => {
-    getEtherBalance(web3, account).then(val => setEtherBalance(val));
+    setAccount(account)
+  }, [account])
+
+  useEffect(() => {
+    getEtherBalance(web3, account).then((val) => setEtherBalance(val))
   }, [account])
 
   async function connect() {
@@ -63,10 +72,10 @@ export default function ConnectButton({ handleOpenModal, setAccount }: Props) {
         bg="gray.800"
         border="1px solid transparent"
         _hover={{
-          border: "1px",
-          borderStyle: "solid",
-          borderColor: "blue.400",
-          backgroundColor: "gray.700",
+          border: '1px',
+          borderStyle: 'solid',
+          borderColor: 'blue.400',
+          backgroundColor: 'gray.700',
         }}
         borderRadius="xl"
         m="1px"
@@ -77,13 +86,13 @@ export default function ConnectButton({ handleOpenModal, setAccount }: Props) {
           {account &&
             `${account.slice(0, 6)}...${account.slice(
               account.length - 4,
-              account.length
+              account.length,
             )}`}
         </Text>
         <Identicon />
       </Button>
     </Box>
-  ): (
+  ) : (
     <Button
       onClick={connect}
       bg="blue.800"
@@ -93,17 +102,15 @@ export default function ConnectButton({ handleOpenModal, setAccount }: Props) {
       borderRadius="xl"
       border="1px solid transparent"
       _hover={{
-        borderColor: "blue.700",
-        color: "blue.400",
+        borderColor: 'blue.700',
+        color: 'blue.400',
       }}
       _active={{
-        backgroundColor: "blue.800",
-        borderColor: "blue.700",
+        backgroundColor: 'blue.800',
+        borderColor: 'blue.700',
       }}
     >
       Connect to a wallet
     </Button>
-  );
+  )
 }
-
-
