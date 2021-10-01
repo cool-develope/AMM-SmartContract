@@ -50,6 +50,9 @@ cd SmartContracts
 # Deploy to matic
 truffle migrate --network matic --f 2
 ```
+
+- Contract Address: 0xEa9210A33dB6b7168fC3E406Fac29Bd48F867fc5
+
 ## Unit Test
 
 Before unit test, you need to modify the migration file `2_amm_ropsten_migration.js` to `_amm_ropsten_migration.js`

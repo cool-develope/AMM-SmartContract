@@ -3,9 +3,9 @@ const AMM = artifacts.require('AMM')
 module.exports = function (deployer) {
   deployer.deploy(
     AMM,
-    '0x1f9840a85d5af5bf1d1762f925bdaddc4201f984',
-    '0xf76D4a441E4ba86A923ce32B89AFF89dBccAA075',
-    '0xaD6D458402F60fD3Bd25163575031ACDce07538D',
+    '0x7B4ff840F174061C22E7F473a4881F68d3C38fc2', // TRAX
+    '0x501E02d78c54dd8eA451223cdE11618DDD738bc3', // PIX
+    '0x71A38f67493fc8889663024f8F9fae3F36D1AAa5', // DAI
     200,
     800,
     10,
