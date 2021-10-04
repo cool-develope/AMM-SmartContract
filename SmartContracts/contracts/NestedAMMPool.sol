@@ -4,6 +4,7 @@ pragma solidity >=0.4.22 <0.9.0;
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {IERC20Metadata} from "@openzeppelin/contracts/token/ERC20/extensions/IERC20Metadata.sol";
 import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
+import "./NestedAMMFactory.sol";
 import "./ABDKMath64x64.sol";
 
 
@@ -401,7 +402,8 @@ contract NestedAMMPool is IERC20, ERC20 {
         require(amountA > 0 && amountB > 0 && amountY > 0, "INSUFFICIENT_INPUT_AMOUNT");
 
         if (totalSupply() == 0) {
-           _mint(address(0), MINIMUM_LIQUIDITY); // permanently lock the first MINIMUM_LIQUIDITY tokens
+            address _feeTo = NestedAMMFactory(factory).feeTo();
+           _mint(_feeTo, MINIMUM_LIQUIDITY); // permanently lock the first MINIMUM_LIQUIDITY tokens
         } else {
             require(
                 reserves[tokenA] > 0 &&

@@ -1,13 +1,8 @@
-const AMM = artifacts.require('AMM')
+const NestedAMMFactory = artifacts.require('NestedAMMFactory')
 
-module.exports = function (deployer) {
-  deployer.deploy(
-    AMM,
-    '0x2cA48b8c2d574b282FDAB69545646983A94a3286', // TRAX
-    '0xC3F72e2D9c0EcE408dCb673452668Cb3F299949a', // PIX
-    '0x98dD19075C63D57a8f2109aC8f61aF6aFAFab09b', // DAI
-    200,
-    800,
-    10,
-  ); // sigma = 0.2, eta = 0.8, maximum_margin_of_error = 1%
-}
+module.exports = async function (deployer) {
+  await deployer.deploy(NestedAMMFactory, "0xdf4DedE67d9A086ad7EDeC69886101bE8D2CEa35");
+  const instance = await NestedAMMFactory.deployed()
+
+  await instance.setFeeTo("0xdf4DedE67d9A086ad7EDeC69886101bE8D2CEa35");
+};

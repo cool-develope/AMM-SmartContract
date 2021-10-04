@@ -1,4 +1,6 @@
-const AMM = artifacts.require('AMM')
+const NestedAMMFactory = artifacts.require('NestedAMMFactory')
+const NestedAMMPool = artifacts.require('NestedAMMPool')
+
 const ERC20PresetMinterPauser = artifacts.require(
     '@openzeppelin/contracts/token/presets/ERC20PresetMinterPauser',
 )
@@ -6,36 +8,37 @@ const ERC20PresetMinterPauser = artifacts.require(
 contract('AMM test', async (accounts) => {
     it('It should be success', async () => {
         let balance, price, result, Error
+        const instance = await NestedAMMFactory.deployed()
 
-        const instance = await AMM.deployed()
+        await instance.setFeeTo(accounts[6], { from: accounts[5]});
 
-        const aToken = await ERC20PresetMinterPauser.at(
-            await instance.aTokenAddress.call(),
-        )
-        const bToken = await ERC20PresetMinterPauser.at(
-            await instance.bTokenAddress.call(),
-        )
-        const yToken = await ERC20PresetMinterPauser.at(
-            await instance.yTokenAddress.call(),
+        let tokenA = await ERC20PresetMinterPauser.new("tokenA", "TKN"); 
+        let tokenB = await ERC20PresetMinterPauser.new("tokenB", "TKN"); 
+        let tokenY = await ERC20PresetMinterPauser.new("tokenY", "TKN"); 
+        
+        await instance.createPool(tokenA.address, tokenB.address, tokenY.address)
+
+        const ammPool = await NestedAMMPool.at(
+            await instance.getPool.call(tokenA.address, tokenB.address, tokenY.address)
         )
 
         const mintAmount = 1000000000000
 
-        aToken.mint(accounts[0], mintAmount)
-        bToken.mint(accounts[0], mintAmount)
-        yToken.mint(accounts[0], mintAmount)
+        tokenA.mint(accounts[0], mintAmount)
+        tokenB.mint(accounts[0], mintAmount)
+        tokenY.mint(accounts[0], mintAmount)
 
-        aToken.mint(accounts[1], mintAmount)
-        bToken.mint(accounts[1], mintAmount)
-        yToken.mint(accounts[1], mintAmount)
+        tokenA.mint(accounts[1], mintAmount)
+        tokenB.mint(accounts[1], mintAmount)
+        tokenY.mint(accounts[1], mintAmount)
 
-        await aToken.approve.sendTransaction(instance.address, mintAmount, {
+        await tokenA.approve.sendTransaction(ammPool.address, mintAmount, {
             from: accounts[0],
         })
-        await bToken.approve.sendTransaction(instance.address, mintAmount, {
+        await tokenB.approve.sendTransaction(ammPool.address, mintAmount, {
             from: accounts[0],
         })
-        await yToken.approve.sendTransaction(instance.address, mintAmount, {
+        await tokenY.approve.sendTransaction(ammPool.address, mintAmount, {
             from: accounts[0],
         })
 
@@ -43,13 +46,14 @@ contract('AMM test', async (accounts) => {
         const bDepositAmount = 200000000000
         const yDepositAmount = 300000000000
 
-        await instance.addLiquidity.sendTransaction(
+        await ammPool.addLiquidity.sendTransaction(
             aDepositAmount,
             bDepositAmount,
             yDepositAmount,
             { from: accounts[0] },
         )
-        balance = await instance.getBalance.call(aToken.address)
+
+        balance = await ammPool.reserves.call(tokenA.address)
 
         assert.equal(
             aDepositAmount,
@@ -58,7 +62,7 @@ contract('AMM test', async (accounts) => {
         )
 
         const yAddAmount = 80000000000
-        result = await instance.getAmountsAddToken(yToken.address, yAddAmount)
+        result = await ammPool.getAmountsAddToken(tokenY.address, yAddAmount)
 
         assert.equal(
             parseInt((aDepositAmount / yDepositAmount) * yAddAmount),
@@ -78,7 +82,7 @@ contract('AMM test', async (accounts) => {
 
         Error = undefined
         try {
-            await instance.addLiquidity.sendTransaction(
+            await ammPool.addLiquidity.sendTransaction(
                 result.addAmountA,
                 result.addAmountB,
                 result.addAmountY,
@@ -90,24 +94,24 @@ contract('AMM test', async (accounts) => {
 
         assert.notEqual(Error, undefined, 'Error must be thrown')
         assert.isAbove(
-            Error.message.search('INSUFFICIENT_APPROVE_AMOUNT_TOKEN_A'),
+            Error.message.search('transfer amount exceeds allowance'),
             -1,
             'Error revert INSUFFICIENT_APPROVE_AMOUNT_TOKEN_A',
         )
 
-        await aToken.approve.sendTransaction(instance.address, mintAmount, {
+        await tokenA.approve.sendTransaction(ammPool.address, mintAmount, {
             from: accounts[1],
         })
-        await bToken.approve.sendTransaction(instance.address, mintAmount, {
+        await tokenB.approve.sendTransaction(ammPool.address, mintAmount, {
             from: accounts[1],
         })
-        await yToken.approve.sendTransaction(instance.address, mintAmount, {
+        await tokenY.approve.sendTransaction(ammPool.address, mintAmount, {
             from: accounts[1],
         })
 
         Error = undefined
         try {
-            await instance.addLiquidity.sendTransaction(
+            await ammPool.addLiquidity.sendTransaction(
                 parseInt(result.addAmountA.toNumber() * 1.1 + 1),
                 result.addAmountB,
                 result.addAmountY,
@@ -125,14 +129,14 @@ contract('AMM test', async (accounts) => {
         )
         
         console.log("#######################################################################");
-        await instance.addLiquidity.sendTransaction(
+        await ammPool.addLiquidity.sendTransaction(
             result.addAmountA,
             result.addAmountB,
             result.addAmountY,
             { from: accounts[1] },
         )
 
-        balance = await instance.balanceOf(accounts[1]);
+        balance = await ammPool.balanceOf(accounts[1]);
         
         console.log("Balance of LP topken after deposit: ", balance.toNumber());
         
@@ -142,7 +146,7 @@ contract('AMM test', async (accounts) => {
             "Deposit balance wasn't matched!",
         )
 
-        balance = await instance.getBalance.call(bToken.address)
+        balance = await ammPool.reserves.call(tokenB.address)
 
         assert.equal(
             bDepositAmount + result.addAmountB.toNumber(),
@@ -152,49 +156,49 @@ contract('AMM test', async (accounts) => {
         
         console.log("#######################################################################");
 
-        balance = await instance.getBalance.call(aToken.address)
+        balance = await ammPool.reserves.call(tokenA.address)
         console.log(`Balance of Token A: ${balance.toNumber()}`);
 
-        balance = await instance.getBalance.call(bToken.address)
+        balance = await ammPool.reserves.call(tokenB.address)
         console.log(`Balance of Token B: ${balance.toNumber()}`);
 
-        balance = await instance.getBalance.call(yToken.address)
+        balance = await ammPool.reserves.call(tokenY.address)
         console.log(`Balance of Token Y: ${balance.toNumber()}`);
 
-        price = await instance.getPrice(aToken.address, bToken.address);
+        price = await ammPool.getPrice(tokenA.address, tokenB.address);
         console.log(`Price to A to B: ${parseFloat(price) / Math.pow(10, 18)}`);
 
-        price = await instance.getPrice(bToken.address, aToken.address);
+        price = await ammPool.getPrice(tokenB.address, tokenA.address);
         console.log(`Price to B to A: ${parseFloat(price) / Math.pow(10, 18)}`);
         
-        price = await instance.getPrice(aToken.address, yToken.address);
+        price = await ammPool.getPrice(tokenA.address, tokenY.address);
         console.log(`Price to A to Y: ${parseFloat(price) / Math.pow(10, 18)}`);
         
-        price = await instance.getPrice(yToken.address, bToken.address);
+        price = await ammPool.getPrice(tokenY.address, tokenB.address);
         console.log(`Price to Y to B: ${parseFloat(price) / Math.pow(10, 18)}`);
 
         const bSwapAmount = 30000000
-        result = await instance.getAmountOut(
+        result = await ammPool.getAmountOut(
             bSwapAmount,
-            bToken.address,
-            aToken.address,
+            tokenB.address,
+            tokenA.address,
         )
 
-        let beforBalance = await aToken.balanceOf.call(accounts[1])
-        await instance.swapToken.sendTransaction(
+        let beforBalance = await tokenA.balanceOf.call(accounts[1])
+        await ammPool.swapToken.sendTransaction(
             bSwapAmount,
-            bToken.address,
-            aToken.address,
-            "0x0000000000000000000000000000000000000000",
+            tokenB.address,
+            tokenA.address,
+            accounts[1],
             50,
             { from: accounts[1] },
         )
-        let afterBalance = await aToken.balanceOf.call(accounts[1])
+        let afterBalance = await tokenA.balanceOf.call(accounts[1])
         
         console.log("#######################################################################");
         console.log(`Blanace before swap: ${beforBalance} after: ${afterBalance}`);
         
-        price = await instance.getPrice(bToken.address, aToken.address);
+        price = await ammPool.getPrice(tokenB.address, tokenA.address);
 
         console.log(`Provide B Token: ${bSwapAmount} Return A Token: ${afterBalance - beforBalance} Price of B to A : ${parseFloat(price) / Math.pow(10, 18)} Executed Price: ${(afterBalance - beforBalance) / bSwapAmount}`);
         
@@ -206,22 +210,22 @@ contract('AMM test', async (accounts) => {
 
         console.log("#######################################################################");
         const aSwapAmount = 20000000
-        result = await instance.getAmountOut(
+        result = await ammPool.getAmountOut(
             aSwapAmount,
-            aToken.address,
-            yToken.address,
+            tokenA.address,
+            tokenY.address,
         )
         
-        beforBalance = await yToken.balanceOf.call(accounts[2])
-        await instance.swapToken.sendTransaction(
+        beforBalance = await tokenY.balanceOf.call(accounts[2])
+        await ammPool.swapToken.sendTransaction(
             aSwapAmount,
-            aToken.address,
-            yToken.address,
+            tokenA.address,
+            tokenY.address,
             accounts[2],
             50,
             { from: accounts[1] },
         )
-        afterBalance = await yToken.balanceOf.call(accounts[2])
+        afterBalance = await tokenY.balanceOf.call(accounts[2])
         
         
         console.log(`Blanace before swap: ${beforBalance} after: ${afterBalance}`);
@@ -234,13 +238,13 @@ contract('AMM test', async (accounts) => {
 
         console.log("#######################################################################");
         const ySwapAmount = 5000000000
-        result = await instance.getAmountOut(
+        result = await ammPool.getAmountOut(
             ySwapAmount,
-            yToken.address,
-            bToken.address,
+            tokenY.address,
+            tokenB.address,
         )
         
-        price = await instance.getPrice(yToken.address, bToken.address);
+        price = await ammPool.getPrice(tokenY.address, tokenB.address);
 
         theory_price = parseFloat(price) / Math.pow(10, 18)
         real_price = parseFloat(result) / ySwapAmount
@@ -251,10 +255,10 @@ contract('AMM test', async (accounts) => {
         
         Error = undefined
         try {
-            await instance.swapToken.sendTransaction(
+            await ammPool.swapToken.sendTransaction(
                 ySwapAmount,
-                yToken.address,
-                bToken.address,
+                tokenY.address,
+                tokenB.address,
                 accounts[1],
                 13,
                 { from: accounts[1] },
@@ -273,31 +277,31 @@ contract('AMM test', async (accounts) => {
 
         console.log("#######################################################################");
 
-        const beforABalance = await aToken.balanceOf.call(accounts[1]);
-        const beforBBalance = await bToken.balanceOf.call(accounts[1]);
-        const beforYBalance = await yToken.balanceOf.call(accounts[1]);
+        const beforABalance = await tokenA.balanceOf.call(accounts[1]);
+        const beforBBalance = await tokenB.balanceOf.call(accounts[1]);
+        const beforYBalance = await tokenY.balanceOf.call(accounts[1]);
         
-        let _balance = await instance.balanceOf(accounts[1]);
+        let _balance = await ammPool.balanceOf(accounts[1]);
         
-        await instance.approve.sendTransaction(accounts[1], yAddAmount, {
+        await ammPool.approve.sendTransaction(accounts[1], yAddAmount, {
             from: accounts[1],
         });
 
-        await instance.removeLiquidity.sendTransaction(
+        await ammPool.removeLiquidity.sendTransaction(
             yAddAmount,
             { from: accounts[1] },
         )
         
-        afterBalance = await aToken.balanceOf.call(accounts[1])
+        afterBalance = await tokenA.balanceOf.call(accounts[1])
         console.log(`The amount change of A Token after removeLiquidity: ${afterBalance - beforABalance}`);
 
-        afterBalance = await bToken.balanceOf.call(accounts[1])
+        afterBalance = await tokenB.balanceOf.call(accounts[1])
         console.log(`The amount change of B Token after removeLiquidity: ${afterBalance - beforBBalance}`);
 
-        afterBalance = await yToken.balanceOf.call(accounts[1])
+        afterBalance = await tokenY.balanceOf.call(accounts[1])
         console.log(`The amount change of Y Token after removeLiquidity: ${afterBalance - beforYBalance}`);
 
-        balance = await instance.balanceOf(accounts[1]);
+        balance = await ammPool.balanceOf(accounts[1]);
         
         assert.equal(
             _balance - balance,

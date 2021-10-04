@@ -27,7 +27,7 @@ contract NestedAMMFactory {
         return allPools.length;
     }
 
-    function createPair(
+    function createPool(
         address tokenA,
         address tokenB,
         address tokenY
