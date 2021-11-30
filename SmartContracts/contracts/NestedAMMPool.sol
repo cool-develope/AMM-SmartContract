@@ -35,6 +35,7 @@ contract NestedAMMPool is IERC20, ERC20 {
     uint private unlocked = 1;
 
     mapping(address => uint) public reserves;
+    mapping(address => mapping(address => uint)) private balances;
 
     modifier lock() {
         require(unlocked == 1, 'Nested AMM: LOCKED');
@@ -435,6 +436,10 @@ contract NestedAMMPool is IERC20, ERC20 {
         _mint(msg.sender, amountY);
 
         mu = muFunction();
+
+        balances[msg.sender][tokenA] = balances[msg.sender][tokenA] + amountA;
+        balances[msg.sender][tokenB] = balances[msg.sender][tokenB] + amountB;
+        balances[msg.sender][tokenY] = balances[msg.sender][tokenY] + amountY;
 
         emit Deposit(amountA, amountB, amountY, ABDKMath64x64.mulu(mu, 10**10));
 
