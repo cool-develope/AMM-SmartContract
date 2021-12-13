@@ -1,0 +1,63 @@
+type PoolCreated @entity {
+  id: ID!
+  tokenA: Bytes! # address
+  tokenB: Bytes! # address
+  tokenY: Bytes! # address
+  pool: Bytes! # address
+  param4: BigInt! # uint256
+  timestamp: BigInt! # uint256
+  sender: Bytes! # address
+}
+
+type Approval @entity {
+  id: ID!
+  owner: Bytes! # address
+  spender: Bytes! # address
+  value: BigInt! # uint256
+  pool: Bytes! # address
+  timestamp: BigInt! # uint256
+}
+
+type Deposit @entity {
+  id: ID!
+  amountA: BigInt! # uint256
+  amountB: BigInt! # uint256
+  amountY: BigInt! # uint256
+  muLast: BigInt! # uint256
+  pool: Bytes! # address
+  timestamp: BigInt! # uint256
+  sender: Bytes! # address
+}
+
+type Swap @entity {
+  id: ID!
+  amountIn: BigInt! # uint256
+  amountOut: BigInt! # uint256
+  tokenIn: Bytes! # address
+  tokenOut: Bytes! # address
+  sender: Bytes! # address
+  pool: Bytes! # address
+  timestamp: BigInt! # uint256
+}
+
+type Transfer @entity {
+  id: ID!
+  from: Bytes! # address
+  to: Bytes! # address
+  value: BigInt! # uint256
+  pool: Bytes! # address
+  timestamp: BigInt! # uint256
+  gasUsed: BigInt! # uint256
+  gasPrice: BigInt! # uint256
+}
+
+type Withdraw @entity {
+  id: ID!
+  amountA: BigInt! # uint256
+  amountB: BigInt! # uint256
+  amountY: BigInt! # uint256
+  muLast: BigInt! # uint256
+  pool: Bytes! # address
+  timestamp: BigInt! # uint256
+  sender: Bytes! # address
+}
